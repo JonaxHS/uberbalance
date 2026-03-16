@@ -5,7 +5,7 @@ const API_URL = `http://${window.location.hostname}:5001/api`;
 
 function App() {
     const [user, setUser] = useState(JSON.parse(localStorage.getItem('user')) || null);
-    const [token, setToken] = useState(localStorage.getItem('token')) || null;
+    const [token, setToken] = useState(localStorage.getItem('token') || null);
     const [isRegistering, setIsRegistering] = useState(false);
     const [authInput, setAuthInput] = useState({ username: '', password: '' });
 
