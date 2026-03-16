@@ -2,7 +2,7 @@ services:
   backend:
     build: ./server
     ports:
-      - "5000:5000"
+      - "5001:5000"
     volumes:
       - ./server:/app
       - /app/node_modules
@@ -12,7 +12,8 @@ services:
   frontend:
     build: ./client
     ports:
-      - "5173:5173"
+      - "5174:5173"
+
     volumes:
       - ./client:/app
       - /app/node_modules
