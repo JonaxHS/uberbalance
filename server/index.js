@@ -1,75 +1,117 @@
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const db = require('./database');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const SECRET_KEY = process.env.JWT_SECRET || 'uber-secret-key-123';
 
 app.use(cors());
 app.use(bodyParser.json());
 
-// Get all shifts
-app.get('/api/shifts', (req, res) => {
-    db.all('SELECT * FROM shifts ORDER BY date DESC', [], (err, rows) => {
+// Middleware to verify JWT
+const authenticateToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) return res.status(401).json({ error: 'Token missing' });
+
+    jwt.verify(token, SECRET_KEY, (err, user) => {
+        if (err) return res.status(403).json({ error: 'Invalid token' });
+        req.user = user;
+        next();
+    });
+};
+
+// --- AUTH ENDPOINTS ---
+
+app.post('/api/register', async (req, res) => {
+    const { username, password } = req.body;
+    if (!username || !password) return res.status(400).json({ error: 'Required fields missing' });
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const query = 'INSERT INTO users (username, password) VALUES (?, ?)';
+
+    db.run(query, [username, hashedPassword], function (err) {
         if (err) {
+            if (err.message.includes('UNIQUE')) {
+                return res.status(400).json({ error: 'Username already exists' });
+            }
             return res.status(500).json({ error: err.message });
         }
+        const token = jwt.sign({ id: this.lastID, username }, SECRET_KEY);
+        res.json({ token, user: { id: this.lastID, username } });
+    });
+});
+
+app.post('/api/login', (req, res) => {
+    const { username, password } = req.body;
+    db.get('SELECT * FROM users WHERE username = ?', [username], async (err, user) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!user) return res.status(400).json({ error: 'User not found' });
+
+        const validPassword = await bcrypt.compare(password, user.password);
+        if (!validPassword) return res.status(400).json({ error: 'Invalid password' });
+
+        const token = jwt.sign({ id: user.id, username: user.username }, SECRET_KEY);
+        res.json({ token, user: { id: user.id, username: user.username } });
+    });
+});
+
+// --- SHIFT ENDPOINTS (SECURED) ---
+
+// Get all shifts
+app.get('/api/shifts', authenticateToken, (req, res) => {
+    db.all('SELECT * FROM shifts WHERE user_id = ? ORDER BY date DESC', [req.user.id], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
         res.json(rows);
     });
 });
 
 // Get current active shift
-app.get('/api/shifts/active', (req, res) => {
-    db.get('SELECT * FROM shifts WHERE status = "active" LIMIT 1', [], (err, row) => {
-        if (err) {
-            return res.status(500).json({ error: err.message });
-        }
+app.get('/api/shifts/active', authenticateToken, (req, res) => {
+    db.get('SELECT * FROM shifts WHERE status = "active" AND user_id = ? LIMIT 1', [req.user.id], (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
         res.json(row || null);
     });
 });
 
 // Start a new shift
-app.post('/api/shifts/start', (req, res) => {
+app.post('/api/shifts/start', authenticateToken, (req, res) => {
     const { start_cash } = req.body;
     if (start_cash === undefined) {
         return res.status(400).json({ error: 'start_cash is required' });
     }
 
     // Check if there is already an active shift
-    db.get('SELECT id FROM shifts WHERE status = "active" LIMIT 1', [], (err, row) => {
-        if (row) {
-            return res.status(400).json({ error: 'A shift is already active' });
-        }
+    db.get('SELECT id FROM shifts WHERE status = "active" AND user_id = ? LIMIT 1', [req.user.id], (err, row) => {
+        if (row) return res.status(400).json({ error: 'A shift is already active' });
 
-        const query = 'INSERT INTO shifts (start_cash, status) VALUES (?, "active")';
-        db.run(query, [start_cash], function (err) {
-            if (err) {
-                return res.status(500).json({ error: err.message });
-            }
+        const query = 'INSERT INTO shifts (start_cash, status, user_id) VALUES (?, "active", ?)';
+        db.run(query, [start_cash, req.user.id], function (err) {
+            if (err) return res.status(500).json({ error: err.message });
             res.json({ id: this.lastID, start_cash, status: 'active' });
         });
     });
 });
 
 // End current shift
-app.patch('/api/shifts/end', (req, res) => {
+app.patch('/api/shifts/end', authenticateToken, (req, res) => {
     const { end_cash } = req.body;
     if (end_cash === undefined) {
         return res.status(400).json({ error: 'end_cash is required' });
     }
 
-    db.get('SELECT * FROM shifts WHERE status = "active" LIMIT 1', [], (err, row) => {
-        if (!row) {
-            return res.status(400).json({ error: 'No active shift found' });
-        }
+    db.get('SELECT * FROM shifts WHERE status = "active" AND user_id = ? LIMIT 1', [req.user.id], (err, row) => {
+        if (!row) return res.status(400).json({ error: 'No active shift found' });
 
         const profit = end_cash - row.start_cash;
         const query = 'UPDATE shifts SET end_cash = ?, profit = ?, status = "completed" WHERE id = ?';
         db.run(query, [end_cash, profit, row.id], function (err) {
-            if (err) {
-                return res.status(500).json({ error: err.message });
-            }
+            if (err) return res.status(500).json({ error: err.message });
             res.json({ ...row, end_cash, profit, status: 'completed' });
         });
     });

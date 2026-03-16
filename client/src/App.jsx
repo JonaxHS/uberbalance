@@ -1,22 +1,63 @@
 import React, { useState, useEffect } from 'react';
-import { Wallet, Play, Square, History, TrendingUp, ArrowRightLeft } from 'lucide-react';
+import { Wallet, Play, Square, History, TrendingUp, LogOut, User, Lock, ArrowRight } from 'lucide-react';
 
 const API_URL = `http://${window.location.hostname}:5001/api`;
 
 function App() {
+    const [user, setUser] = useState(JSON.parse(localStorage.getItem('user')) || null);
+    const [token, setToken] = useState(localStorage.getItem('token')) || null;
+    const [isRegistering, setIsRegistering] = useState(false);
+    const [authInput, setAuthInput] = useState({ username: '', password: '' });
+
     const [activeShift, setActiveShift] = useState(null);
     const [shifts, setShifts] = useState([]);
     const [inputVal, setInputVal] = useState('');
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(!!token);
 
     useEffect(() => {
-        fetchActiveShift();
-        fetchHistory();
-    }, []);
+        if (token) {
+            fetchActiveShift();
+            fetchHistory();
+        }
+    }, [token]);
+
+    const handleAuth = async () => {
+        const endpoint = isRegistering ? '/register' : '/login';
+        try {
+            const res = await fetch(`${API_URL}${endpoint}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(authInput)
+            });
+            const data = await res.json();
+            if (res.ok) {
+                localStorage.setItem('token', data.token);
+                localStorage.setItem('user', JSON.stringify(data.user));
+                setToken(data.token);
+                setUser(data.user);
+                setAuthInput({ username: '', password: '' });
+            } else {
+                alert(data.error);
+            }
+        } catch (err) {
+            alert('Error en la autenticación');
+        }
+    };
+
+    const logout = () => {
+        localStorage.clear();
+        setToken(null);
+        setUser(null);
+        setActiveShift(null);
+        setShifts([]);
+    };
 
     const fetchActiveShift = async () => {
         try {
-            const res = await fetch(`${API_URL}/shifts/active`);
+            const res = await fetch(`${API_URL}/shifts/active`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.status === 403) return logout();
             const data = await res.json();
             setActiveShift(data);
         } catch (err) {
@@ -28,7 +69,9 @@ function App() {
 
     const fetchHistory = async () => {
         try {
-            const res = await fetch(`${API_URL}/shifts`);
+            const res = await fetch(`${API_URL}/shifts`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
             const data = await res.json();
             setShifts(data);
         } catch (err) {
@@ -41,7 +84,10 @@ function App() {
         try {
             const res = await fetch(`${API_URL}/shifts/start`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
                 body: JSON.stringify({ start_cash: parseFloat(inputVal) })
             });
             const data = await res.json();
@@ -60,7 +106,10 @@ function App() {
         try {
             const res = await fetch(`${API_URL}/shifts/end`, {
                 method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
                 body: JSON.stringify({ end_cash: parseFloat(inputVal) })
             });
             const data = await res.json();
@@ -74,13 +123,60 @@ function App() {
         }
     };
 
+    if (!token) {
+        return (
+            <div className="animate glass-card">
+                <header style={{ marginBottom: '24px', textAlign: 'center' }}>
+                    <h1>Uber Balance</h1>
+                    <p className="subtitle">{isRegistering ? 'Crea tu cuenta' : 'Inicia sesión para continuar'}</p>
+                </header>
+                <div style={{ position: 'relative', marginBottom: '12px' }}>
+                    <User size={18} style={{ position: 'absolute', left: '12px', top: '16px', color: 'var(--text-secondary)' }} />
+                    <input
+                        style={{ paddingLeft: '40px' }}
+                        placeholder="Usuario"
+                        value={authInput.username}
+                        onChange={(e) => setAuthInput({ ...authInput, username: e.target.value })}
+                    />
+                </div>
+                <div style={{ position: 'relative', marginBottom: '20px' }}>
+                    <Lock size={18} style={{ position: 'absolute', left: '12px', top: '16px', color: 'var(--text-secondary)' }} />
+                    <input
+                        type="password"
+                        style={{ paddingLeft: '40px' }}
+                        placeholder="Contraseña"
+                        value={authInput.password}
+                        onChange={(e) => setAuthInput({ ...authInput, password: e.target.value })}
+                    />
+                </div>
+                <button className="btn btn-primary" onClick={handleAuth}>
+                    {isRegistering ? 'Crear Cuenta' : 'Entrar'} <ArrowRight size={18} />
+                </button>
+                <p style={{ textAlign: 'center', marginTop: '16px', fontSize: '0.85rem' }}>
+                    {isRegistering ? '¿Ya tienes cuenta?' : '¿No tienes cuenta?'}
+                    <span
+                        onClick={() => setIsRegistering(!isRegistering)}
+                        style={{ color: 'var(--accent-color)', cursor: 'pointer', marginLeft: '8px', fontWeight: 600 }}
+                    >
+                        {isRegistering ? 'Inicia Sesión' : 'Regístrate'}
+                    </span>
+                </p>
+            </div>
+        );
+    }
+
     if (loading) return <div className="glass-card">Cargando...</div>;
 
     return (
         <div className="animate">
-            <header style={{ marginBottom: '32px' }}>
-                <h1>Uber Balance</h1>
-                <p className="subtitle">Lleva el control de tus ganancias diarias</p>
+            <header style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                    <h1>Uber Balance</h1>
+                    <p className="subtitle">Hola, {user.username} 👋</p>
+                </div>
+                <button onClick={logout} className="btn" style={{ width: 'auto', background: 'transparent', color: 'var(--text-secondary)', padding: '8px' }}>
+                    <LogOut size={20} />
+                </button>
             </header>
 
             <main>
@@ -136,7 +232,7 @@ function App() {
                 <div className="glass-card animate">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
                         <History size={20} color="#06C167" />
-                        <span style={{ fontWeight: 600 }}>Historial Reciente</span>
+                        <span style={{ fontWeight: 600 }}>Tu Historial</span>
                     </div>
 
                     <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
@@ -159,7 +255,7 @@ function App() {
                         ))}
                         {shifts.filter(s => s.status === 'completed').length === 0 && (
                             <p style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.9rem', padding: '20px' }}>
-                                No hay turnos registrados aún.
+                                Aún no tienes turnos registrados.
                             </p>
                         )}
                     </div>
