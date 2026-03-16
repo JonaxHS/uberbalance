@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Wallet, Play, Square, History, TrendingUp, LogOut, User, Lock, ArrowRight } from 'lucide-react';
+import { Wallet, Play, Square, History, TrendingUp, LogOut, User, Lock, ArrowRight, Trash2, Coins, Banknote } from 'lucide-react';
 
 const API_URL = `http://${window.location.hostname}:5001/api`;
 
@@ -11,7 +11,7 @@ function App() {
 
     const [activeShift, setActiveShift] = useState(null);
     const [shifts, setShifts] = useState([]);
-    const [inputVal, setInputVal] = useState('');
+    const [breakdown, setBreakdown] = useState({ bills: '', coins: '' });
     const [loading, setLoading] = useState(!!token);
 
     useEffect(() => {
@@ -87,7 +87,7 @@ function App() {
     };
 
     const handleStartShift = async () => {
-        if (!inputVal || isNaN(inputVal)) return;
+        if (!breakdown.bills && !breakdown.coins) return alert('Ingresa montos');
         try {
             const res = await fetch(`${API_URL}/shifts/start`, {
                 method: 'POST',
@@ -95,12 +95,15 @@ function App() {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({ start_cash: parseFloat(inputVal) })
+                body: JSON.stringify({
+                    start_bills: parseFloat(breakdown.bills) || 0,
+                    start_coins: parseFloat(breakdown.coins) || 0
+                })
             });
             const data = await res.json();
             if (res.ok) {
                 setActiveShift(data);
-                setInputVal('');
+                setBreakdown({ bills: '', coins: '' });
                 fetchHistory();
             }
         } catch (err) {
@@ -109,7 +112,7 @@ function App() {
     };
 
     const handleEndShift = async () => {
-        if (!inputVal || isNaN(inputVal)) return;
+        if (!breakdown.bills && !breakdown.coins) return alert('Ingresa montos');
         try {
             const res = await fetch(`${API_URL}/shifts/end`, {
                 method: 'PATCH',
@@ -117,16 +120,34 @@ function App() {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({ end_cash: parseFloat(inputVal) })
+                body: JSON.stringify({
+                    end_bills: parseFloat(breakdown.bills) || 0,
+                    end_coins: parseFloat(breakdown.coins) || 0
+                })
             });
             const data = await res.json();
             if (res.ok) {
                 setActiveShift(null);
-                setInputVal('');
+                setBreakdown({ bills: '', coins: '' });
                 fetchHistory();
             }
         } catch (err) {
             alert('Error al finalizar turno');
+        }
+    };
+
+    const handleDeleteShift = async (id) => {
+        if (!confirm('¿Seguro que quieres borrar este turno?')) return;
+        try {
+            const res = await fetch(`${API_URL}/shifts/${id}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                fetchHistory();
+            }
+        } catch (err) {
+            alert('Error al borrar el turno');
         }
     };
 
@@ -205,13 +226,35 @@ function App() {
                             </div>
                         </div>
 
-                        <label className="stat-label" style={{ marginBottom: '8px' }}>Dinero al regresar:</label>
-                        <input
-                            type="number"
-                            placeholder="$ 0.00"
-                            value={inputVal}
-                            onChange={(e) => setInputVal(e.target.value)}
-                        />
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+                            <div>
+                                <label className="stat-label" style={{ marginBottom: '4px' }}>Billetes:</label>
+                                <div style={{ position: 'relative' }}>
+                                    <Banknote size={16} style={{ position: 'absolute', left: '10px', top: '14px', color: 'var(--text-secondary)' }} />
+                                    <input
+                                        type="number"
+                                        style={{ paddingLeft: '32px', marginBottom: 0 }}
+                                        placeholder="0.00"
+                                        value={breakdown.bills}
+                                        onChange={(e) => setBreakdown({ ...breakdown, bills: e.target.value })}
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="stat-label" style={{ marginBottom: '4px' }}>Monedas:</label>
+                                <div style={{ position: 'relative' }}>
+                                    <Coins size={16} style={{ position: 'absolute', left: '10px', top: '14px', color: 'var(--text-secondary)' }} />
+                                    <input
+                                        type="number"
+                                        style={{ paddingLeft: '32px', marginBottom: 0 }}
+                                        placeholder="0.00"
+                                        value={breakdown.coins}
+                                        onChange={(e) => setBreakdown({ ...breakdown, coins: e.target.value })}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
                         <button className="btn btn-primary" onClick={handleEndShift} style={{ background: '#FF4D4D', color: '#fff', boxShadow: 'none' }}>
                             <Square size={18} /> Finalizar Turno
                         </button>
@@ -223,13 +266,35 @@ function App() {
                             <span style={{ fontWeight: 600 }}>Iniciar Nuevo Turno</span>
                         </div>
 
-                        <label className="stat-label" style={{ marginBottom: '8px' }}>Dinero inicial:</label>
-                        <input
-                            type="number"
-                            placeholder="$ 0.00"
-                            value={inputVal}
-                            onChange={(e) => setInputVal(e.target.value)}
-                        />
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+                            <div>
+                                <label className="stat-label" style={{ marginBottom: '4px' }}>Billetes:</label>
+                                <div style={{ position: 'relative' }}>
+                                    <Banknote size={16} style={{ position: 'absolute', left: '10px', top: '14px', color: 'var(--text-secondary)' }} />
+                                    <input
+                                        type="number"
+                                        style={{ paddingLeft: '32px', marginBottom: 0 }}
+                                        placeholder="0.00"
+                                        value={breakdown.bills}
+                                        onChange={(e) => setBreakdown({ ...breakdown, bills: e.target.value })}
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="stat-label" style={{ marginBottom: '4px' }}>Monedas:</label>
+                                <div style={{ position: 'relative' }}>
+                                    <Coins size={16} style={{ position: 'absolute', left: '10px', top: '14px', color: 'var(--text-secondary)' }} />
+                                    <input
+                                        type="number"
+                                        style={{ paddingLeft: '32px', marginBottom: 0 }}
+                                        placeholder="0.00"
+                                        value={breakdown.coins}
+                                        onChange={(e) => setBreakdown({ ...breakdown, coins: e.target.value })}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
                         <button className="btn btn-primary" onClick={handleStartShift}>
                             <Play size={18} /> Comenzar a Trabajar
                         </button>
@@ -242,21 +307,29 @@ function App() {
                         <span style={{ fontWeight: 600 }}>Tu Historial</span>
                     </div>
 
-                    <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                    <div style={{ maxHeight: '350px', overflowY: 'auto' }}>
                         {shifts.filter(s => s.status === 'completed').map(shift => (
                             <div key={shift.id} className="history-item">
-                                <div>
+                                <div style={{ flex: 1 }}>
                                     <div style={{ fontSize: '0.9rem', fontWeight: 600 }}>
                                         {new Date(shift.date).toLocaleDateString()}
                                     </div>
                                     <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                                        ${shift.start_cash} → ${shift.end_cash}
+                                        ${shift.start_cash} (${shift.start_bills}b/${shift.start_coins}m) → ${shift.end_cash}
                                     </div>
                                 </div>
-                                <div style={{ textAlign: 'right' }}>
+                                <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: '12px' }}>
                                     <div style={{ color: shift.profit >= 0 ? '#06C167' : '#FF4D4D', fontWeight: 700 }}>
                                         {shift.profit >= 0 ? '+' : ''}${shift.profit.toFixed(2)}
                                     </div>
+                                    <button
+                                        onClick={() => handleDeleteShift(shift.id)}
+                                        style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.2)', cursor: 'pointer', padding: '4px' }}
+                                        onMouseEnter={(e) => e.currentTarget.style.color = '#FF4D4D'}
+                                        onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255,255,255,0.2)'}
+                                    >
+                                        <Trash2 size={16} />
+                                    </button>
                                 </div>
                             </div>
                         ))}

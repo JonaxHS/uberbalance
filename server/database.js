@@ -24,7 +24,11 @@ db.serialize(() => {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       date TEXT DEFAULT (datetime('now','localtime')),
       start_cash REAL NOT NULL,
+      start_bills REAL DEFAULT 0,
+      start_coins REAL DEFAULT 0,
       end_cash REAL,
+      end_bills REAL DEFAULT 0,
+      end_coins REAL DEFAULT 0,
       profit REAL,
       status TEXT DEFAULT 'active',
       user_id INTEGER,
@@ -32,10 +36,24 @@ db.serialize(() => {
     )
   `, (err) => {
         if (!err) {
-            // Check if user_id column exists, if not add it (simple migration)
             db.all("PRAGMA table_info(shifts)", (err, rows) => {
-                if (rows && !rows.find(row => row.name === 'user_id')) {
-                    db.run("ALTER TABLE shifts ADD COLUMN user_id INTEGER");
+                if (rows) {
+                    const columns = rows.map(r => r.name);
+                    if (!columns.includes('user_id')) {
+                        db.run("ALTER TABLE shifts ADD COLUMN user_id INTEGER");
+                    }
+                    if (!columns.includes('start_bills')) {
+                        db.run("ALTER TABLE shifts ADD COLUMN start_bills REAL DEFAULT 0");
+                    }
+                    if (!columns.includes('start_coins')) {
+                        db.run("ALTER TABLE shifts ADD COLUMN start_coins REAL DEFAULT 0");
+                    }
+                    if (!columns.includes('end_bills')) {
+                        db.run("ALTER TABLE shifts ADD COLUMN end_bills REAL DEFAULT 0");
+                    }
+                    if (!columns.includes('end_coins')) {
+                        db.run("ALTER TABLE shifts ADD COLUMN end_coins REAL DEFAULT 0");
+                    }
                 }
             });
         }

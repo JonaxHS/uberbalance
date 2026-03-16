@@ -81,39 +81,42 @@ app.get('/api/shifts/active', authenticateToken, (req, res) => {
 
 // Start a new shift
 app.post('/api/shifts/start', authenticateToken, (req, res) => {
-    const { start_cash } = req.body;
-    if (start_cash === undefined) {
-        return res.status(400).json({ error: 'start_cash is required' });
-    }
+    const { start_bills, start_coins } = req.body;
+    const start_cash = (parseFloat(start_bills) || 0) + (parseFloat(start_coins) || 0);
 
-    // Check if there is already an active shift
     db.get('SELECT id FROM shifts WHERE status = "active" AND user_id = ? LIMIT 1', [req.user.id], (err, row) => {
         if (row) return res.status(400).json({ error: 'A shift is already active' });
 
-        const query = 'INSERT INTO shifts (start_cash, status, user_id) VALUES (?, "active", ?)';
-        db.run(query, [start_cash, req.user.id], function (err) {
+        const query = 'INSERT INTO shifts (start_cash, start_bills, start_coins, status, user_id) VALUES (?, ?, ?, "active", ?)';
+        db.run(query, [start_cash, start_bills, start_coins, req.user.id], function (err) {
             if (err) return res.status(500).json({ error: err.message });
-            res.json({ id: this.lastID, start_cash, status: 'active' });
+            res.json({ id: this.lastID, start_cash, start_bills, start_coins, status: 'active' });
         });
     });
 });
 
-// End current shift
 app.patch('/api/shifts/end', authenticateToken, (req, res) => {
-    const { end_cash } = req.body;
-    if (end_cash === undefined) {
-        return res.status(400).json({ error: 'end_cash is required' });
-    }
+    const { end_bills, end_coins } = req.body;
+    const end_cash = (parseFloat(end_bills) || 0) + (parseFloat(end_coins) || 0);
 
     db.get('SELECT * FROM shifts WHERE status = "active" AND user_id = ? LIMIT 1', [req.user.id], (err, row) => {
         if (!row) return res.status(400).json({ error: 'No active shift found' });
 
         const profit = end_cash - row.start_cash;
-        const query = 'UPDATE shifts SET end_cash = ?, profit = ?, status = "completed" WHERE id = ?';
-        db.run(query, [end_cash, profit, row.id], function (err) {
+        const query = 'UPDATE shifts SET end_cash = ?, end_bills = ?, end_coins = ?, profit = ?, status = "completed" WHERE id = ?';
+        db.run(query, [end_cash, end_bills, end_coins, profit, row.id], function (err) {
             if (err) return res.status(500).json({ error: err.message });
-            res.json({ ...row, end_cash, profit, status: 'completed' });
+            res.json({ ...row, end_cash, end_bills, end_coins, profit, status: 'completed' });
         });
+    });
+});
+
+app.delete('/api/shifts/:id', authenticateToken, (req, res) => {
+    const { id } = req.params;
+    db.run('DELETE FROM shifts WHERE id = ? AND user_id = ?', [id, req.user.id], function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        if (this.changes === 0) return res.status(404).json({ error: 'Shift not found or unauthorized' });
+        res.json({ message: 'Shift deleted successfully' });
     });
 });
 
