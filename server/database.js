@@ -30,7 +30,16 @@ db.serialize(() => {
       user_id INTEGER,
       FOREIGN KEY(user_id) REFERENCES users(id)
     )
-  `);
+  `, (err) => {
+        if (!err) {
+            // Check if user_id column exists, if not add it (simple migration)
+            db.all("PRAGMA table_info(shifts)", (err, rows) => {
+                if (rows && !rows.find(row => row.name === 'user_id')) {
+                    db.run("ALTER TABLE shifts ADD COLUMN user_id INTEGER");
+                }
+            });
+        }
+    });
 });
 
 module.exports = db;

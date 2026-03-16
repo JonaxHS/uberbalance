@@ -57,9 +57,12 @@ function App() {
             const res = await fetch(`${API_URL}/shifts/active`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            if (res.status === 403) return logout();
-            const data = await res.json();
-            setActiveShift(data);
+            if (res.ok) {
+                const data = await res.json();
+                setActiveShift(data);
+            } else if (res.status === 401 || res.status === 403) {
+                logout();
+            }
         } catch (err) {
             console.error('Error fetching active shift:', err);
         } finally {
@@ -73,7 +76,11 @@ function App() {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             const data = await res.json();
-            setShifts(data);
+            if (res.ok && Array.isArray(data)) {
+                setShifts(data);
+            } else {
+                setShifts([]);
+            }
         } catch (err) {
             console.error('Error fetching shifts:', err);
         }
